@@ -1,0 +1,193 @@
+[gd_scene load_steps=13 format=2]
+
+[ext_resource path="res://portal/frame.material" type="Material" id=1]
+[ext_resource path="res://portal/portal.shader" type="Shader" id=2]
+
+[sub_resource type="GDScript" id=1]
+script/source = "extends Area
+
+export(NodePath) var linked_portal
+
+onready var clones: Dictionary = PortalClones.clones
+
+func _ready():
+	connect(\"body_entered\", self, 'on_body_entered')
+	connect(\"body_exited\", self, 'on_body_exited')
+
+
+func apply_linked_tf(node: Spatial, ref: Spatial):
+	var gtf_lportal = get_node(linked_portal).global_transform
+	var gtf_ref = ref.global_transform
+	node.global_transform = gtf_lportal * global_transform.affine_inverse() * gtf_ref
+	
+
+func _process(_delta):
+	$Viewport.size = get_viewport().size
+	
+	if not linked_portal.is_empty():
+		apply_linked_tf($Viewport/Camera, get_node('../player/rotation_point'))
+	
+
+func _physics_process(_delta):
+	for body in get_overlapping_bodies():
+		if body in clones.keys():
+			var pair = clones[body]
+			apply_linked_tf(pair[0], body)
+			
+			if in_positive_side(body) != pair[1]:
+				substitute_clone(body, pair[0])
+#				swap(body, pair[0])
+#				pair[1] = not pair[1]
+
+
+func substitute_clone(body: PhysicsBody, clone: Spatial):
+	if body.get('vel'):
+		var tf = body.global_transform.affine_inverse() * clone.global_transform
+		body.vel = tf * body.vel
+	
+#	body.global_transform = clone.global_transform
+	apply_linked_tf(body, body)
+	clones.erase(body)
+	clone.queue_free()
+
+
+func swap(a: Spatial, b: Spatial):
+	var gtf = a.global_transform
+	a.global_transform = b.global_transform
+	b.global_transform = gtf
+
+
+func in_positive_side(node: Spatial) -> bool:
+	return to_local(node.global_transform.origin).z > 0
+
+
+func on_body_entered(body: Node):
+#	print(name, ', entered: ', body)
+	if clones_contains(body): return
+	
+	if body in clones.keys():
+		clones[body][1] = in_positive_side(body)
+		return
+	
+	var clone = body.duplicate()
+	clone.set_script(null)
+	clones[body] = [clone, in_positive_side(body)]
+	add_child(clone)
+	apply_linked_tf(clone, body)
+	$\"/root/root/player/rotation_point/Camera\".current = true
+	
+
+func on_body_exited(body: Node):
+#	print(name, ', exited:', body)
+	if body in clones.keys():
+		var clone = clones[body][0]
+		clones.erase(body)
+		clone.queue_free()
+
+
+func clones_contains(body: Node) -> bool:
+	for pair in clones.values():
+		if pair[0] == body:
+			return true
+	return false
+"
+
+[sub_resource type="CubeMesh" id=2]
+size = Vector3( 0.2, 0.2, 0.5 )
+
+[sub_resource type="ViewportTexture" id=12]
+viewport_path = NodePath("Viewport")
+
+[sub_resource type="ShaderMaterial" id=13]
+resource_local_to_scene = true
+shader = ExtResource( 2 )
+shader_param/viewport_texture = SubResource( 12 )
+
+[sub_resource type="CubeMesh" id=14]
+size = Vector3( 1, 1, 0.6 )
+
+[sub_resource type="BoxShape" id=7]
+extents = Vector3( 2, 1.5, 0.05 )
+
+[sub_resource type="CubeMesh" id=8]
+size = Vector3( 0.1, 3, 0.1 )
+
+[sub_resource type="CubeMesh" id=9]
+material = ExtResource( 1 )
+size = Vector3( 4.1, 0.1, 0.1 )
+
+[sub_resource type="BoxShape" id=10]
+extents = Vector3( 2.05, 0.05, 0.05 )
+
+[sub_resource type="BoxShape" id=11]
+extents = Vector3( 0.05, 1.45, 0.05 )
+
+[node name="portal" type="Area"]
+script = SubResource( 1 )
+
+[node name="Viewport" type="Viewport" parent="."]
+size = Vector2( 1024, 1024 )
+handle_input_locally = false
+keep_3d_linear = true
+usage = 3
+gui_disable_input = true
+
+[node name="Camera" type="Camera" parent="Viewport"]
+transform = Transform( 0.862028, 0, -0.506862, 0, 1, 0, 0.506862, 0, 0.862028, -1.30778, -0.197565, 3.24213 )
+cull_mask = 1
+
+[node name="MeshInstance" type="MeshInstance" parent="Viewport/Camera"]
+visible = false
+mesh = SubResource( 2 )
+material/0 = null
+
+[node name="MeshInstance" type="MeshInstance" parent="."]
+transform = Transform( 4, 0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0 )
+layers = 2
+material_override = SubResource( 13 )
+mesh = SubResource( 14 )
+material/0 = null
+
+[node name="CollisionShape" type="CollisionShape" parent="."]
+shape = SubResource( 7 )
+
+[node name="frame" type="StaticBody" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 6.2, 0, 0, 0 )
+collision_layer = 2
+collision_mask = 3
+
+[node name="MeshInstance" type="MeshInstance" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0 )
+mesh = SubResource( 8 )
+material/0 = ExtResource( 1 )
+
+[node name="MeshInstance2" type="MeshInstance" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0 )
+mesh = SubResource( 8 )
+material/0 = ExtResource( 1 )
+
+[node name="MeshInstance3" type="MeshInstance" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0 )
+mesh = SubResource( 9 )
+material/0 = null
+
+[node name="MeshInstance4" type="MeshInstance" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.5, 0 )
+mesh = SubResource( 9 )
+material/0 = ExtResource( 1 )
+
+[node name="CollisionShape" type="CollisionShape" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0 )
+shape = SubResource( 10 )
+
+[node name="CollisionShape2" type="CollisionShape" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.5, 0 )
+shape = SubResource( 10 )
+
+[node name="CollisionShape3" type="CollisionShape" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0 )
+shape = SubResource( 11 )
+
+[node name="CollisionShape4" type="CollisionShape" parent="frame"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 0 )
+shape = SubResource( 11 )
